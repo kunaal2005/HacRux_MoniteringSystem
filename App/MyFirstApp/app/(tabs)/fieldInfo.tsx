@@ -1,39 +1,141 @@
-import React, { useState } from "react";
+import React, { useState, useEffect} from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
 import { Picker } from "@react-native-picker/picker"; // ✅ Picker for dropdowns
-import { useRouter, useLocalSearchParams } from "expo-router"; 
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { doc, getDoc, updateDoc} from "@firebase/firestore"; // Import Firestore functions 
+import { auth, db, rtdb, ref, onValue, collection, addDoc } from "../../constants/firebaseConfig";
 
 export default function FieldInfo() {
   const router = useRouter();
-  const { id, title } = useLocalSearchParams(); // ✅ Get field details from navigation params
+  const { id } = useLocalSearchParams();
+  const user = auth.currentUser;
+
+  // const { id, title } = useLocalSearchParams(); // ✅ Get field details from navigation params
 
   // ✅ State variables for dropdowns and input field
+  const [uniqueSensorId, setUniqueSensorId] = useState(""); // State for UniqueSensorId
   const [cropType, setCropType] = useState("Wheat");
   const [soilType, setSoilType] = useState("Loamy");
   const [growthLevel, setGrowthLevel] = useState("Early Stage");
   const [fieldArea, setFieldArea] = useState("");
+  const [waterRequirementMessage, setWaterRequirementMessage] = useState(""); // State for dynamic message
+  const [isEditing, setIsEditing] = useState(false);
+  const [fieldTitle, setFieldTitle] = useState("Add New Field");
 
-  // ✅ Constant message (Later fetch from Firebase)
-  const waterRequirementMessage = `💧 Water Supply Needed: 30 liters per square meter`;
+  useEffect(() => {
+    const waterRef = ref(rtdb, '/irrigationRecommendation/totalWaterToReleaseLiters');
+    const unsubscribeWater = onValue(waterRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data !== null) {
+        setWaterRequirementMessage(`💧 Water Supply Needed: ${data} liters per square meter`);
+      } else {
+        setWaterRequirementMessage("💧 Water Supply Needed: Information not available.");
+      }
+    }, (error) => {
+      console.error("Error fetching water requirement:", error);
+      Alert.alert("Error", "Failed to fetch water requirement information.");
+    });
+    return () => unsubscribeWater();
+  },);
+  useEffect(() => {
+    if (id && user) {
+      setIsEditing(true);
+      setFieldTitle("Edit Field Information");
+      const fieldDocRef = doc(db, "users", user.uid, "fields", id as string);
+      getDoc(fieldDocRef)
+        .then((docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setUniqueSensorId(data.UniqueSensorId || "");
+            setCropType(data.cropName || "Wheat");
+            setSoilType(data.SoilType || "Loamy");
+            setGrowthLevel(data.cropGrowthLevel || "Early Stage");
+            setFieldArea(String(data.fieldArea) || "");
+          } else {
+            Alert.alert("Error", "Field not found.");
+            router.push("/home");
+          }
+        })
+        .catch((error) => {
+          console.error("Error fetching field data:", error);
+          Alert.alert("Error", "Failed to fetch field information.");
+        });
+    } else {
+      setIsEditing(false);
+      setFieldTitle("Add New Field");
+      // Reset form fields for adding a new field if needed
+      setUniqueSensorId("");
+      setCropType("Wheat");
+      setSoilType("Loamy");
+      setGrowthLevel("Early Stage");
+      setFieldArea("");
+    }
+  }, [id, user, router]);
 
-  const handleSubmit = () => {
-    console.log("Field Updated:", { cropType, soilType, growthLevel, fieldArea });
-    alert("Field Information Updated Successfully!");
+    
+  const handleSubmit = async () => {
+    if (!user) {
+      Alert.alert("Error", "User not logged in.");
+      return;
+    }
+
+    if (!uniqueSensorId || !fieldArea) {
+      Alert.alert("Error", "Please enter the Unique Sensor ID and Field Area.");
+      return;
+    }
+
+    try {
+      const fieldData = {
+        UniqueSensorId: uniqueSensorId,
+        location: { latitude: 0, longitude: 0 }, // You'll likely want to get actual location
+        fieldArea: parseFloat(fieldArea),
+        cropName: cropType,
+        cropGrowthLevel: growthLevel,
+        SoilType: soilType,
+      };
+
+      if (isEditing && id) {
+        const fieldDocRef = doc(db, "users", user.uid, "fields", id as string);
+        await updateDoc(fieldDocRef, fieldData);
+        Alert.alert("Success", "Field Information Updated Successfully!", [
+          { text: "OK", onPress: () => router.push("/home") },
+        ]);
+      } else {
+        const fieldsCollectionRef = collection(db, "users", user.uid, "fields");
+        await addDoc(fieldsCollectionRef, fieldData);
+        Alert.alert("Success", "Field Information Added Successfully!", [
+          { text: "OK", onPress: () => router.push("/home") },
+        ]);
+      }
+    } catch (error) {
+      console.error("Error saving field to Firestore:", error);
+      Alert.alert("Error", `Failed to ${isEditing ? 'update' : 'add'} field information.`);
+    }
   };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      {/* ✅ Field Title at the Top */}
-      <Text style={styles.header}>Field Information - {title}</Text>
+      {/* Dynamic Field Title at the Top */}
+      <Text style={styles.header}>{fieldTitle}</Text>
 
-      {/* ✅ Water Requirement Message */}
+      {/* Water Requirement Message */}
       <View style={styles.waterInfo}>
         <Text style={styles.waterText}>{waterRequirementMessage}</Text>
       </View>
 
-      <Text style={styles.subHeader}>Modify Field Details (if required)</Text>
+      <Text style={styles.subHeader}>Enter Field Details</Text>
 
-      {/* ✅ Field Area Input */}
+      {/* Unique Sensor ID Input */}
+      <Text style={styles.label}>Unique Sensor ID:</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Enter Sensor ID"
+        placeholderTextColor="#aaa"
+        value={uniqueSensorId}
+        onChangeText={setUniqueSensorId}
+      />
+
+      {/* Field Area Input */}
       <Text style={styles.label}>Enter Field Area (in acres):</Text>
       <TextInput
         style={styles.input}
@@ -44,12 +146,12 @@ export default function FieldInfo() {
         onChangeText={setFieldArea}
       />
 
-      {/* ✅ Crop Type Dropdown */}
+      {/* Crop Type Dropdown */}
       <Text style={styles.label}>Select Crop Type:</Text>
       <View style={styles.pickerContainer}>
         <Picker
           selectedValue={cropType}
-          dropdownIconColor="#fff" // ✅ White dropdown arrow
+          dropdownIconColor="#fff"
           onValueChange={(itemValue) => setCropType(itemValue)}
           style={styles.picker}
         >
@@ -60,7 +162,7 @@ export default function FieldInfo() {
         </Picker>
       </View>
 
-      {/* ✅ Soil Type Dropdown */}
+      {/* Soil Type Dropdown */}
       <Text style={styles.label}>Select Soil Type:</Text>
       <View style={styles.pickerContainer}>
         <Picker
@@ -76,7 +178,7 @@ export default function FieldInfo() {
         </Picker>
       </View>
 
-      {/* ✅ Growth Level Dropdown */}
+      {/* Growth Level Dropdown */}
       <Text style={styles.label}>Select Growth Level:</Text>
       <View style={styles.pickerContainer}>
         <Picker
@@ -92,12 +194,13 @@ export default function FieldInfo() {
         </Picker>
       </View>
 
-      {/* ✅ Submit Button */}
+      {/* Submit Button */}
       <TouchableOpacity style={styles.button} onPress={handleSubmit}>
-        <Text style={styles.buttonText}>Update Field Information</Text>
+        <Text style={styles.buttonText}>{isEditing ? "Update Field Information" : "Add Field Information"}</Text>
       </TouchableOpacity>
     </ScrollView>
   );
+  
 }
 
 const styles = StyleSheet.create({
