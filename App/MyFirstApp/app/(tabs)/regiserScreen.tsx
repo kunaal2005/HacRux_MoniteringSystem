@@ -1,48 +1,54 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { useRouter } from "expo-router";
-import { db, collection, addDoc } from "../../constants/firebaseConfig";
+import { db, collection, addDoc } from "../../constants/firebaseConfig"; // Keep these for Firestore later
+import { auth, createUserWithEmailAndPassword } from "../../constants/firebaseConfig"; // Import auth and the function
 
 export default function RegisterScreen() {
-  const [sensorNumber, setSensorNumber] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const router = useRouter();
 
   const handleRegister = async () => {
-    if (!sensorNumber || !email || !password) {
+    if (!email || !password) {
       Alert.alert("Error", "All fields are required.");
       return;
     }
-
+  
     try {
+      // Create user with email and password using Firebase Authentication
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+  
+      // Now that the user is created with Firebase Auth,
+      // you might want to store additional user information (like sensorNumber) in Firestore
       await addDoc(collection(db, "users"), {
-        sensorNumber,
+        uid: user.uid, // Store the Firebase Auth UID
         email,
-        password, // ⚠️ Ideally, use Firebase Authentication and hash the password
+        // Do NOT store the password in Firestore
       });
-
+  
       Alert.alert("Success", "Account created successfully!", [
         { text: "OK", onPress: () => router.replace("../index") },
       ]);
     } catch (error) {
-      console.error("Error adding user to Firebase:", error);
-      Alert.alert("Error", "Failed to create an account.");
+      console.error("Error creating user with Firebase Authentication:", error);
+      let errorMessage = "Failed to create an account.";
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = 'This email address is already in use.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'The email address is invalid.';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'Password should be at least 6 characters.';
+      }
+      Alert.alert("Error", errorMessage);
     }
   };
+
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Create an Account</Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Sensor Number"
-        placeholderTextColor="#aaa"
-        value={sensorNumber}
-        onChangeText={setSensorNumber}
-        keyboardType="numeric"
-      />
 
       <TextInput
         style={styles.input}
@@ -72,7 +78,7 @@ export default function RegisterScreen() {
       </TouchableOpacity>
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#f5f5f5", padding: 20 },

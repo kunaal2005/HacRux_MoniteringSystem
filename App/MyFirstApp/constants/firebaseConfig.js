@@ -1,8 +1,8 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getDatabase } from "firebase/database";
-import { getFirestore } from "firebase/firestore";
-
+import { initializeAuth, getReactNativePersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword} from "firebase/auth"; // Import this
+import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
+import { getFirestore, collection, addDoc, getDocs } from "@firebase/firestore";
+import { getDatabase, ref, onValue } from "firebase/database";
 const firebaseConfig = {
   apiKey: "AIzaSyCTUx49h19ljtXNxUn1j_ClIwAXeQlav-E",
   authDomain: "iothack-e3e50.firebaseapp.com",
@@ -15,8 +15,13 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const database = getDatabase(app);
+// const auth = getAuth(app);
 
-export { auth, db, database };
+const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(ReactNativeAsyncStorage)
+});
+const db = getFirestore(app);
+const rtdb = getDatabase(app);
+
+
+export { auth, db, rtdb, ref, onValue, collection, addDoc, getDocs, createUserWithEmailAndPassword, signInWithEmailAndPassword};

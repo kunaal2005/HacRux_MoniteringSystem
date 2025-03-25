@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { auth, signInWithEmailAndPassword } from "../../constants/firebaseConfig"; // Import auth and signInWithEmailAndPassword
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -9,22 +10,34 @@ export default function LoginScreen() {
   const router = useRouter();
 
   // Dummy user data (Replace with Firebase authentication)
-  const users = {
-    "farmer1@gmail.com": "1234",
-    "farmer2@gmail.com": "5678",
-    "farmer3@gmail.com": "abcd",
-  };
+  // const users = {
+  //   "farmer1@gmail.com": "1234",
+  //   "farmer2@gmail.com": "5678",
+  //   "farmer3@gmail.com": "abcd",
+  // };
 
   const handleLogin = async () => {
-    if (users[email] && users[email] === password) {
-      try {
-        await AsyncStorage.setItem("loggedInUser", email);
-        Alert.alert("Success", "Login Successful!", [{ text: "OK", onPress: () => router.replace("/home") }]);
-      } catch (error) {
-        Alert.alert("Error", "Failed to save login session.");
+    if (!email || !password) {
+      Alert.alert("Error", "Please enter your email and password.");
+      return;
+    }
+    try {
+      // Sign in with email and password using Firebase Authentication
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      await AsyncStorage.setItem("loggedInUser", email);
+      Alert.alert("Success", "Login Successful!", [{ text: "OK", onPress: () => router.replace("/home") }]);
+    } catch (error) {
+      console.error("Error logging in with Firebase Authentication:", error);
+      let errorMessage = "Login failed. Please try again.";
+      if (error.code === 'auth/invalid-email') {
+        errorMessage = 'The email address is invalid.';
+      } else if (error.code === 'auth/user-not-found') {
+        errorMessage = 'There is no user record corresponding to this email.';
+      } else if (error.code === 'auth/wrong-password') {
+        errorMessage = 'Wrong password. Please try again.';
       }
-    } else {
-      Alert.alert("Error", "Invalid email or password. Try again.");
+      Alert.alert("Error", errorMessage);
     }
   };
 

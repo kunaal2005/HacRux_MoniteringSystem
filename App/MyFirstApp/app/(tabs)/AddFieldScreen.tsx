@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { useRouter } from "expo-router";
-// import { db, collection, addDoc, getDocs } from "../../constants/firebaseConfig"; // Firebase functions
+import { db, collection, addDoc, getDocs } from "../../constants/firebaseConfig"; // Firebase functions
 
 export default function AddFieldScreen() {
   const router = useRouter();
